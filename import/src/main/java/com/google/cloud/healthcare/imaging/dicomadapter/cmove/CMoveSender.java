@@ -51,7 +51,7 @@ public class CMoveSender implements ISender {
     InputStream responseStream = dicomWebClient.wadoRs(wadoUri);
 
     CountingInputStream countingStream = new CountingInputStream(responseStream);
-    DicomClient.connectAndCstore(sopClassUid, sopInstanceUid, countingStream,
+    DicomClient.connectAndCstore(0,sopClassUid, sopInstanceUid, countingStream,
         applicationEntity, target.getName(), target.getHost(), target.getPort());
     return countingStream.getCount();
   }

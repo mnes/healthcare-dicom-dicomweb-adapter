@@ -35,10 +35,13 @@ import org.dcm4che3.data.Tag;
 import org.dcm4che3.io.DicomInputStream;
 import org.dcm4che3.net.Status;
 import org.json.JSONArray;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** A client for communicating with the Cloud Healthcare API. */
 public class DicomWebClient implements IDicomWebClient {
 
+  private static final Logger log = LoggerFactory.getLogger(DicomWebClient.class);
   // Factory to create HTTP requests with proper credentials.
   protected final HttpRequestFactory requestFactory;
 
@@ -47,6 +50,9 @@ public class DicomWebClient implements IDicomWebClient {
 
   // The path for a StowRS request to be appended to serviceUrlPrefix.
   private final String stowPath;
+
+  // dynamically changing the healthcare api datasets and dicomStores
+  private String stowPathChangeable;
 
   // If we will delete and retry when we receive HTTP 409.
   private final Boolean useStowOverwrite;
@@ -60,6 +66,10 @@ public class DicomWebClient implements IDicomWebClient {
     this.serviceUrlPrefix = serviceUrlPrefix;
     this.stowPath = stowPath;
     this.useStowOverwrite = false;
+  }
+
+  public void setStowPathChangeable(String datasets, String dicomStores) {
+    this.stowPathChangeable =  String.format("https://healthcare.googleapis.com/v1/projects/%s/locations/%s/datasets/%s/dicomStores/%s/dicomWeb", System.getenv("HEALTH_CARE_API_PROJECT"), System.getenv("HEALTH_CARE_API_LOCATION"), datasets, dicomStores);
   }
 
   @Inject
@@ -131,7 +141,11 @@ public class DicomWebClient implements IDicomWebClient {
   @Override
   public void stowRs(InputStream in) throws IDicomWebClient.DicomWebException {
     GenericUrl url = new GenericUrl(StringUtil.joinPath(serviceUrlPrefix, this.stowPath));
-
+    if (this.stowPathChangeable != null && !this.stowPathChangeable.isEmpty() ){
+      url= new GenericUrl(StringUtil.joinPath(this.stowPathChangeable, this.stowPath));
+      this.stowPathChangeable = "";
+    }
+    log.info("url: "+url);
     // DICOM "Type" parameter:
     // http://dicom.nema.org/medical/dicom/current/output/html/part18.html#sect_6.6.1.1.1
     MultipartContent content = new MultipartContent();

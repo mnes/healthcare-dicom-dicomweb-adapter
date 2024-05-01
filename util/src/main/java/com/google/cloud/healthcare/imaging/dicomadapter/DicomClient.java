@@ -29,12 +29,15 @@ import org.dcm4che3.net.InputStreamDataWriter;
 import org.dcm4che3.net.Status;
 import org.dcm4che3.net.pdu.AAssociateRQ;
 import org.dcm4che3.net.pdu.PresentationContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * DicomClient is used to handle client-side legacy DICOM requests on given association.
  */
 public class DicomClient {
 
+  private static final Logger log = LoggerFactory.getLogger(DicomClient.class);
   private Association association;
 
   public DicomClient(Association association) {
@@ -71,6 +74,7 @@ public class DicomClient {
   }
 
   public static void connectAndCstore(
+      int message,
       String sopClassUid,
       String sopInstanceUid,
       InputStream in,
@@ -79,7 +83,6 @@ public class DicomClient {
       String dimsePeerHost,
       int dimsePeerPort) throws IOException, InterruptedException {
     DicomInputStream din = new DicomInputStream(in);
-    din.readFileMetaInformation();
 
     PresentationContext pc = new PresentationContext(1, sopClassUid, din.getTransferSyntax());
     DicomClient dicomClient;
@@ -93,7 +96,18 @@ public class DicomClient {
 
     Association association = dicomClient.getAssociation();
     try {
-      FutureDimseRSP handler = new FutureDimseRSP(association.nextMessageID());
+      // new msgID set for tracking the request
+      int msgId;
+      if(message > 0){
+        msgId = message;
+      }
+      else {
+        msgId = association.nextMessageID();
+      }
+      log.info("message(param): "+message);
+      log.info("msgId(final): "+msgId);
+
+      FutureDimseRSP handler = new FutureDimseRSP(msgId);
       dicomClient.cstore(
           sopClassUid, sopInstanceUid, din.getTransferSyntax(), din, handler);
       handler.next();

@@ -29,6 +29,8 @@ public interface IDicomWebClient {
 
   Boolean getStowOverwrite();
 
+  void setStowPathChangeable(String datasets, String dicomStores);
+
   void delete(String path) throws DicomWebException;
 
   void delete(InputStream stream) throws DicomWebException;

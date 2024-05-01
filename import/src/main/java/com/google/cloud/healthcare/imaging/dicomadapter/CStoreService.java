@@ -14,7 +14,9 @@
 
 package com.google.cloud.healthcare.imaging.dicomadapter;
 
+import com.google.cloud.healthcare.IDicomWebClient;
 import com.google.cloud.healthcare.IDicomWebClient.DicomWebException;
+import com.google.cloud.healthcare.StringUtil;
 import com.google.cloud.healthcare.deid.redactor.DicomRedactor;
 import com.google.cloud.healthcare.imaging.dicomadapter.cstore.DicomStreamUtil;
 import com.google.cloud.healthcare.imaging.dicomadapter.cstore.destination.DestinationHolder;
@@ -24,17 +26,21 @@ import com.google.cloud.healthcare.imaging.dicomadapter.cstore.multipledest.IMul
 import com.google.cloud.healthcare.imaging.dicomadapter.monitoring.Event;
 import com.google.cloud.healthcare.imaging.dicomadapter.monitoring.MonitoringService;
 import com.google.common.io.CountingInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.PipedInputStream;
-import java.io.PipedOutputStream;
+import java.io.*;
+import java.lang.reflect.Type;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorCompletionService;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.Tag;
 import org.dcm4che3.data.VR;
@@ -54,7 +60,7 @@ import org.slf4j.LoggerFactory;
  */
 public class CStoreService extends BasicCStoreSCP {
 
-  private static Logger log = LoggerFactory.getLogger(CStoreService.class);
+  private final Logger log = LoggerFactory.getLogger(CStoreService.class);
 
   private final IDestinationClientFactory destinationClientFactory;
   private final IMultipleDestinationUploadService multipleSendService;
@@ -75,6 +81,19 @@ public class CStoreService extends BasicCStoreSCP {
     }
   }
 
+  private  String readFile(String filePath) {
+    StringBuilder content = new StringBuilder();
+    try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
+      String line;
+      while ((line = br.readLine()) != null) {
+        content.append(line).append("\n");
+      }
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+    return content.toString();
+  }
+
   @Override
   protected void store(
       Association association,
@@ -88,6 +107,24 @@ public class CStoreService extends BasicCStoreSCP {
 
       String sopClassUID = request.getString(Tag.AffectedSOPClassUID);
       String sopInstanceUID = request.getString(Tag.AffectedSOPInstanceUID);
+
+      // get messageID from request and open the file with that name upload
+      // to the specified dataset and dicomStore
+      String messageID = request.getString(Tag.MessageID);
+      log.info("messageID:"+messageID);
+      final Map<String, String> fileDataMap = new HashMap<>();;
+      String filePath = System.getenv("SHARED_FOLDER")+messageID+".json";
+      Path path = Paths.get(filePath);
+      if (Files.exists(path)) {
+          String fileContent = readFile(filePath);
+
+          // Convert string to Map using Gson
+          Gson gson = new Gson();
+          Type type = new TypeToken<Map<String, String>>() {}.getType();
+          fileDataMap.putAll(gson.fromJson(fileContent, type));
+      }
+      log.info("fileDataMap:"+fileDataMap);
+
       String transferSyntax = presentationContext.getTransferSyntax();
 
       validateParam(sopClassUID, "AffectedSOPClassUID");
@@ -126,7 +163,26 @@ public class CStoreService extends BasicCStoreSCP {
         });
       } else {
         processorList.add((inputStream, outputStream) -> {
+          // updated the healthcare api path if the dataset and dicomStore specified
+          if ( fileDataMap.get("datasets") != null && !fileDataMap.get("datasets").isEmpty() &&
+                  fileDataMap.get("dicomStores") != null && !fileDataMap.get("dicomStores").isEmpty()) {
+            destinationHolder.getSingleDestination().setStowPathChangeable(fileDataMap.get("datasets"), fileDataMap.get("dicomStores"));
+          }
+
           destinationHolder.getSingleDestination().stowRs(inputStream);
+
+          // delete the uploaded json file from shared storage
+          if (Files.exists(path)) {
+            try {
+              // Attempt to delete the file
+              Files.delete(path);
+              log.info(messageID+".json File deleted successfully.");
+            } catch (IOException e) {
+              // Handle any errors that occur during deletion
+              log.error("Error deleting file: " + e.getMessage());
+            }
+          }
+
         });
       }
 

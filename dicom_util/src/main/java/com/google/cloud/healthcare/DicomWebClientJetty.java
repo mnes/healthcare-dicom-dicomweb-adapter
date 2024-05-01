@@ -54,6 +54,10 @@ public class DicomWebClientJetty implements IDicomWebClient {
   }
 
   @Override
+  public void setStowPathChangeable(String datasets, String dicomStores) {
+  }
+
+  @Override
   public InputStream wadoRs(String path) throws DicomWebException {
     throw new UnsupportedOperationException("Not Implemented, use DicomWebClient");
   }

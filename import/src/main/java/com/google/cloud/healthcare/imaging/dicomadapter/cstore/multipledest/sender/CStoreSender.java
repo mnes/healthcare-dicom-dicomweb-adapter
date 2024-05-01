@@ -21,6 +21,7 @@ public class CStoreSender implements Closeable {
                     InputStream inputStream)
       throws IOException, InterruptedException {
     DicomClient.connectAndCstore(
+            0,
         sopClassUid,
         sopInstanceUid,
         inputStream,

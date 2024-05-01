@@ -20,8 +20,12 @@ import com.google.cloud.pubsub.v1.AckReplyConsumer;
 import com.google.cloud.pubsub.v1.MessageReceiver;
 import com.google.pubsub.v1.PubsubMessage;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class ExportMessageReceiver implements MessageReceiver {
   private DicomSender dicomSender;
+  private static final Logger log = LoggerFactory.getLogger(ExportMessageReceiver.class);
 
   ExportMessageReceiver(DicomSender dicomSender) {
     this.dicomSender = dicomSender;
@@ -32,6 +36,11 @@ public class ExportMessageReceiver implements MessageReceiver {
     try {
       MonitoringService.addEvent(Event.REQUEST);
       dicomSender.send(message);
+      log.info("message: "+message);
+      log.info("message.getMessageId(): "+message.getMessageId());
+      log.info("message.getAttributesMap(): "+message.getAttributesMap());
+      log.info("message.getData(): "+message.getData().toString());
+
       consumer.ack();
     } catch (Exception e) {
       MonitoringService.addEvent(Event.ERROR);
