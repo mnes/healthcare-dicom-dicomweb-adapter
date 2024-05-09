@@ -58,6 +58,7 @@ dependencies {
     compile 'com.google.guava:guava:28.1-jre'
     compile 'com.google.auth:google-auth-library-oauth2-http'
     compile "com.google.api-client:google-api-client"
+    compile "com.google.cloud:google-cloud-pubsub"
 
     compile "com.beust:jcommander:1.72"
     compile "org.dcm4che:dcm4che-core:5.31.2"

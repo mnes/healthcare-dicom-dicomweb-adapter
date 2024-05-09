@@ -14,9 +14,9 @@
 
 package com.google.cloud.healthcare.imaging.dicomadapter;
 
-import com.google.cloud.healthcare.IDicomWebClient;
+import com.google.api.gax.core.FixedCredentialsProvider;
+import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.healthcare.IDicomWebClient.DicomWebException;
-import com.google.cloud.healthcare.StringUtil;
 import com.google.cloud.healthcare.deid.redactor.DicomRedactor;
 import com.google.cloud.healthcare.imaging.dicomadapter.cstore.DicomStreamUtil;
 import com.google.cloud.healthcare.imaging.dicomadapter.cstore.destination.DestinationHolder;
@@ -25,6 +25,7 @@ import com.google.cloud.healthcare.imaging.dicomadapter.cstore.multipledest.IMul
 import com.google.cloud.healthcare.imaging.dicomadapter.cstore.multipledest.IMultipleDestinationUploadService.MultipleDestinationUploadServiceException;
 import com.google.cloud.healthcare.imaging.dicomadapter.monitoring.Event;
 import com.google.cloud.healthcare.imaging.dicomadapter.monitoring.MonitoringService;
+import com.google.cloud.pubsub.v1.Publisher;
 import com.google.common.io.CountingInputStream;
 import java.io.*;
 import java.lang.reflect.Type;
@@ -41,6 +42,9 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorCompletionService;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import com.google.protobuf.ByteString;
+import com.google.pubsub.v1.ProjectTopicName;
+import com.google.pubsub.v1.PubsubMessage;
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.Tag;
 import org.dcm4che3.data.VR;
@@ -92,6 +96,42 @@ public class CStoreService extends BasicCStoreSCP {
       e.printStackTrace();
     }
     return content.toString();
+  }
+
+  private void publishMessage(Map<String, String> attributes){
+    // Replace these values with your own project ID, topic ID, and path to your service account key file
+    String projectId = System.getenv("PROJECT_NAME");
+    String topicId = System.getenv("TOPIC_UPLOAD_COMPLETE");
+
+    // Create a publisher
+    ProjectTopicName topicName = ProjectTopicName.of(projectId, topicId);
+    Publisher publisher = null;
+    try {
+      // Credentials, use the default service credentials.
+      GoogleCredentials credentials = GoogleCredentials.getApplicationDefault();
+      publisher = Publisher.newBuilder(topicName).setCredentialsProvider(FixedCredentialsProvider.create(credentials)).build();
+
+      // Create a message with data and attributes
+      ByteString data = ByteString.copyFromUtf8("upload complete");
+      PubsubMessage pubsubMessage = PubsubMessage.newBuilder()
+              .setData(data)
+              .putAllAttributes(attributes)
+              .build();
+
+      // Publish the message
+      publisher.publish(pubsubMessage).get();
+      System.out.println("Message published successfully.");
+    } catch (IOException e) {
+        throw new RuntimeException(e);
+    } catch (ExecutionException e) {
+        throw new RuntimeException(e);
+    } catch (InterruptedException e) {
+        throw new RuntimeException(e);
+    } finally {
+      if (publisher != null) {
+        publisher.shutdown();
+      }
+    }
   }
 
   @Override
@@ -196,6 +236,10 @@ public class CStoreService extends BasicCStoreSCP {
 
       response.setInt(Tag.Status, VR.US, Status.Success);
       MonitoringService.addEvent(Event.CSTORE_BYTES, countingStream.getCount());
+
+      fileDataMap.put("sopClassUID", sopClassUID);
+      fileDataMap.put("sopInstanceUID", sopInstanceUID);
+      publishMessage(fileDataMap);
     } catch (DicomWebException e) {
       reportError(e, Event.CSTORE_ERROR);
       throw new DicomServiceException(e.getStatus(), e);

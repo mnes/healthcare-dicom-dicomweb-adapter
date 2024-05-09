@@ -37,9 +37,6 @@ public class ExportMessageReceiver implements MessageReceiver {
       MonitoringService.addEvent(Event.REQUEST);
       dicomSender.send(message);
       log.info("message: "+message);
-      log.info("message.getMessageId(): "+message.getMessageId());
-      log.info("message.getAttributesMap(): "+message.getAttributesMap());
-      log.info("message.getData(): "+message.getData().toString());
 
       consumer.ack();
     } catch (Exception e) {
