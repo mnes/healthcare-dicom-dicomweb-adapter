@@ -17,24 +17,18 @@ package com.google.cloud.healthcare.imaging.dicomadapter;
 import com.beust.jcommander.JCommander;
 import com.google.api.client.http.HttpRequestFactory;
 import com.google.api.client.http.javanet.NetHttpTransport;
-import com.google.api.core.ApiService;
 import com.google.auth.http.HttpCredentialsAdapter;
 import com.google.auth.oauth2.GoogleCredentials;
-import com.google.cloud.healthcare.DicomWebClient;
-import com.google.cloud.healthcare.DicomWebClientJetty;
-import com.google.cloud.healthcare.IDicomWebClient;
-import com.google.cloud.healthcare.LogUtil;
-import com.google.cloud.healthcare.StringUtil;
+import com.google.cloud.healthcare.*;
 import com.google.cloud.healthcare.imaging.dicomadapter.monitoring.Event;
 import com.google.cloud.healthcare.imaging.dicomadapter.monitoring.MonitoringService;
-import com.google.cloud.pubsub.v1.Subscriber;
-import com.google.common.util.concurrent.MoreExecutors;
-import com.google.pubsub.v1.ProjectSubscriptionName;
-import java.io.IOException;
-import java.security.GeneralSecurityException;
-import java.util.Arrays;
+import com.google.protobuf.ByteString;
+import com.google.pubsub.v1.PubsubMessage;
 import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.net.Connection;
+
+import java.io.IOException;
+import java.util.Arrays;
 
 public class ExportAdapter {
 
@@ -117,30 +111,25 @@ public class ExportAdapter {
       System.err.println("Neither C-STORE nor STOW-RS flags have been specified.");
       System.exit(1);
     }
-
-    Subscriber subscriber = null;
     try {
-      ProjectSubscriptionName subscriptionName =
-          ProjectSubscriptionName.of(Flags.projectId, Flags.subscriptionId);
-      subscriber =
-          Subscriber.newBuilder(subscriptionName, new ExportMessageReceiver(dicomSender)).build();
-      subscriber.addListener(
-          new Subscriber.Listener() {
-            @Override
-            public void failed(Subscriber.State from, Throwable failure) {
-              System.err.println(failure);
-            }
-          },
-          MoreExecutors.directExecutor());
-      ApiService service = subscriber.startAsync();
-      service.awaitRunning();
-
-      System.out.println("Pubsub listener up and running.");
-      service.awaitTerminated();
-    } finally {
-      if (subscriber != null) {
-        subscriber.stopAsync();
+      MonitoringService.addEvent(Event.REQUEST);
+      Thread.sleep(5000);
+      if (!flags.messageData.isEmpty()) {
+        // Create a ByteString from a string message
+        ByteString byteString = ByteString.copyFromUtf8(flags.messageData);
+        // Create a new PubsubMessage object
+        PubsubMessage message = PubsubMessage.newBuilder()
+                .setData(byteString) // Set the message data
+                .build();
+        dicomSender.send(message);
+        System.out.println("Message Data:" + message.getData().toStringUtf8());
+      } else {
+        System.err.println("no messageData flags have been specified.");
+        System.exit(1);
       }
+    } catch (Exception e) {
+      MonitoringService.addEvent(Event.ERROR);
+      e.printStackTrace();
     }
   }
 }

@@ -21,6 +21,12 @@ import com.beust.jcommander.Parameters;
 public class Flags {
   /** Flags for exporting via DIMSE C-Store. */
   @Parameter(
+          names = {"--message_data"},
+          description = "pubsub message as parameter e.g. /studies/<STUDY_UID>/series/<SERIES_UID>/instances/<INSTANCE_UID>"
+  )
+  public static String messageData = "";
+
+  @Parameter(
     names = {"--peer_dimse_aet"},
     description = "Application Entity Title of DIMSE peer."
   )
