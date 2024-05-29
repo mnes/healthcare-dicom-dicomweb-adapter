@@ -113,7 +113,7 @@ public class ExportAdapter {
     }
     try {
       MonitoringService.addEvent(Event.REQUEST);
-      Thread.sleep(5000);
+      Thread.sleep(30000);
       if (!flags.messageData.isEmpty()) {
         // Create a ByteString from a string message
         ByteString byteString = ByteString.copyFromUtf8(flags.messageData);
