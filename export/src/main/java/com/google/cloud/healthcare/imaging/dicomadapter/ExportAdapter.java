@@ -26,9 +26,13 @@ import com.google.protobuf.ByteString;
 import com.google.pubsub.v1.PubsubMessage;
 import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.net.Connection;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 public class ExportAdapter {
 
@@ -37,6 +41,16 @@ public class ExportAdapter {
       return new NetHttpTransport().createRequestFactory();
     }
     return new NetHttpTransport().createRequestFactory(new HttpCredentialsAdapter(credentials));
+  }
+
+
+  private static String qidoFromSeriesWadoUri(String wadoUri) {
+    String qidoUri =
+            String.format(
+                    "%sinstances",
+                    wadoUri);
+    System.out.println("qidoUri: "+qidoUri);
+    return qidoUri;
   }
 
   public static void main(String[] args) throws IOException {
@@ -115,14 +129,48 @@ public class ExportAdapter {
       MonitoringService.addEvent(Event.REQUEST);
       Thread.sleep(30000);
       if (!flags.messageData.isEmpty()) {
-        // Create a ByteString from a string message
-        ByteString byteString = ByteString.copyFromUtf8(flags.messageData);
-        // Create a new PubsubMessage object
-        PubsubMessage message = PubsubMessage.newBuilder()
-                .setData(byteString) // Set the message data
-                .build();
-        dicomSender.send(message);
-        System.out.println("Message Data:" + message.getData().toStringUtf8());
+        if (flags.messageData.matches("/studies/.*/series/.*/")) {
+          String qidoUri = qidoFromSeriesWadoUri(flags.messageData);
+
+          // Invoke QIDO-RS to get DICOM tags needed to invoke C-Store.
+          JSONArray qidoResponse = dicomWebClient.qidoRs(qidoUri);
+          if (qidoResponse.length() != 1) {
+            throw new IllegalArgumentException(
+                    "Invalid QidoRS JSON array length for response: " + qidoResponse.toString());
+          }
+          List<String> instanceUrls = new ArrayList<>();
+
+          for (int i = 0; i < qidoResponse.length(); i++) {
+            JSONObject instance = qidoResponse.getJSONObject(i);
+            String instanceUid = instance.getJSONObject("00080018").getJSONArray("Value").getString(0);
+            String instanceUrl = String.format("%s/%s", qidoUri, instanceUid);
+            instanceUrls.add(instanceUrl);
+          }
+          int i=0;
+          for (String instanceUrl: instanceUrls){
+            // Create a ByteString from a string message
+            ByteString byteString = ByteString.copyFromUtf8(instanceUrl);
+            // Create a new PubsubMessage object
+            PubsubMessage message = PubsubMessage.newBuilder()
+                    .setData(byteString) // Set the message data
+                    .build();
+            dicomSender.send(message);
+            i++;
+            String output= String.format(
+                    "Series Message Data(%s):%s",
+                    i, message.getData().toStringUtf8());
+            System.out.println(output);
+          }
+        } else {
+          // Create a ByteString from a string message
+          ByteString byteString = ByteString.copyFromUtf8(flags.messageData);
+          // Create a new PubsubMessage object
+          PubsubMessage message = PubsubMessage.newBuilder()
+                  .setData(byteString) // Set the message data
+                  .build();
+          dicomSender.send(message);
+          System.out.println("Message Data:" + message.getData().toStringUtf8());
+        }
       } else {
         System.err.println("no messageData flags have been specified.");
         System.exit(1);
